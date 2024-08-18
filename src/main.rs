@@ -16,13 +16,18 @@ struct Velocity {
     y: f32,
 }
 
+#[derive(Component, Debug)]
+struct Rotation {
+    angle: f32,
+}
+
 fn main() {
     App::new()
         //This is the default plugin that comes with bevy which includes the renderer and ui
         .add_plugins(DefaultPlugins)
         // Adding the system to the app
         .add_systems(Startup, spawn_spaceship)
-        .add_systems(Update, (update_position, print_position))
+        .add_systems(Update, (update_position, print_info))
         .run();
 }
 
@@ -30,26 +35,26 @@ fn spawn_spaceship(mut commands: Commands) {
     // We are using commands.spawn() to create a new entity
     // We are adding 2 Components to the entity Position and Velocity
     // Which makes up the Entity
-    commands.spawn((Position { x: 0.0, y: 0.0 }, Velocity { x: 1.0, y: 1.0 }));
+    commands.spawn((Position { x: 0.0, y: 0.0 }, Velocity { x: 1.0, y: 1.0 }, Rotation { angle: 0.0 }));
 }
 
 // Query is like database we are fetching the Entities that Has VELOCITY & POSITION
 // We didn't add &mut because we are not modifying the velocity we are just reading value
 // But we added &mut because we are modifying the position by using readonly velocity
-fn update_position(mut query: Query<(&Velocity, &mut Position)>) {
+fn update_position(mut query: Query<(&Velocity, &mut Position, &Rotation)>) {
     // We are using query.iter_mut() to get the iterator of the query
-    for (velocity, mut position) in query.iter_mut() {
-        position.x += velocity.x;
-        position.y += velocity.y;
+    for (velocity, mut position, rotation) in query.iter_mut() {
+        position.x += velocity.x * rotation.angle.cos();
+        position.y += velocity.y * rotation.angle.sin();
     }
 }
 
 // We are fetching the Entities that Has POSITION only
 // We didn't add &mut because we are not modifying the position we are just reading value
-fn print_position(query: Query<(Entity, &Position)>) {
+fn print_info(query: Query<(Entity, &Position, &Rotation, &Velocity)>) {
     // We are using query.iter() to get the iterator of the query
     // Note we are not using query.iter_mut() because we are not modifying the position
-    for (entity, position) in query.iter() {
-        println!("{:?} {:?}", entity, position);
+    for (entity, position, rotation, velocity) in query.iter() {
+        println!("{:?} {:?} {:?} {:?}", entity, position, rotation, velocity);
     }
 }
