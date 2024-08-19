@@ -4,10 +4,13 @@ use bevy::prelude::*;
 struct Player {}
 
 #[derive(Component, Debug)]
-struct SpaceCraft {
+struct SpaceCraftStats {
     max_speed: f32,
     active_speed: f32,
     min_speed: f32,
+    rot_speed: f32,
+    rot_accel: f32,
+    craft_accel: f32,
 }
 
 #[derive(Component, Debug)]
@@ -17,8 +20,9 @@ struct PlayerCamera;
 struct Enemy;
 
 #[derive(Component, Debug)]
-struct Velocity {
-    value: f32,
+struct SpaceCraft {
+    velocity: f32,
+    rot_velocity: f32,
 }
 
 fn main() {
@@ -27,29 +31,12 @@ fn main() {
         .add_plugins(DefaultPlugins)
         // Adding the system to the app
         .add_systems(Startup, step_up)
-        .add_systems(
-            Update,
-            (player_movement, enemy_movement, camera_movement).chain(),
-        )
+        .add_systems(Update, (player_movement, camera_movement,print_craft_stats).chain())
         .run();
 }
 
 fn step_up(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((Camera2dBundle::default(), PlayerCamera));
-    commands.spawn((
-        SpriteBundle {
-            texture: asset_server.load("ship_H.png"),
-            transform: Transform::from_xyz(250.0, 0.0, 0.0),
-            ..default()
-        },
-        Velocity { value: 0.0 },
-        Player {},
-        SpaceCraft {
-            max_speed: 150.0,
-            active_speed: 100.0,
-            min_speed: 30.0,
-        },
-    ));
     commands.spawn((
         SpriteBundle {
             texture: asset_server.load("enemy_A.png"),
@@ -58,48 +45,111 @@ fn step_up(mut commands: Commands, asset_server: Res<AssetServer>) {
         },
         Enemy,
     ));
+    commands.spawn((
+        SpriteBundle {
+            texture: asset_server.load("ship_H.png"),
+            transform: Transform::from_xyz(250.0, 0.0, 0.0),
+            ..default()
+        },
+        SpaceCraft {
+            velocity: 0.0,
+            rot_velocity: 0.0,
+        },
+        Player {},
+        SpaceCraftStats {
+            max_speed: 700.0,
+            active_speed: 300.0,
+            min_speed: 150.0,
+            rot_speed: 5.0,
+            rot_accel: 0.25,
+            craft_accel: 5.5,
+        },
+    ));
+
 }
 
 fn player_movement(
-    mut query: Query<(&mut Transform, &mut Velocity, &SpaceCraft), With<Player>>,
+    mut query: Query<(&mut Transform, &mut SpaceCraft, &SpaceCraftStats), With<Player>>,
     time: Res<Time>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
 ) {
-    for (mut transform, mut velocity, space_craft) in query.iter_mut() {
-        let dir = transform.up();
+    for (mut transform, mut space_craft, space_craft_stats) in query.iter_mut() {
+        let dir = transform.up().normalize();
 
-        let current_velocity = velocity.value;
-
-        let accel: f32 = 3.5;
+        let current_velocity = space_craft.velocity;
 
         if keyboard_input.pressed(KeyCode::KeyW) {
-            velocity.value += accel;
-            transform.translation += dir * velocity.value * time.delta_seconds();
-        } else if keyboard_input.pressed(KeyCode::KeyS) {
-            velocity.value -= accel;
-            if velocity.value < space_craft.min_speed {
-                velocity.value = space_craft.min_speed;
+            space_craft.velocity += space_craft_stats.craft_accel;
+            if space_craft.velocity > space_craft_stats.max_speed {
+                space_craft.velocity = space_craft_stats.max_speed;
             }
-            transform.translation += dir * velocity.value * time.delta_seconds();
+            transform.translation += dir * space_craft.velocity * time.delta_seconds();
+        } else if keyboard_input.pressed(KeyCode::KeyS) {
+            space_craft.velocity -= space_craft_stats.craft_accel;
+            if space_craft.velocity < space_craft_stats.min_speed {
+                space_craft.velocity = space_craft_stats.min_speed;
+            }
+            transform.translation += dir * space_craft.velocity * time.delta_seconds();
         } else {
-            let sign = space_craft.active_speed - current_velocity;
-            velocity.value += sign.signum() * accel;
-            transform.translation += dir * velocity.value * time.delta_seconds();
+            let sign = space_craft_stats.active_speed - current_velocity;
+            space_craft.velocity += sign.signum() * space_craft_stats.craft_accel;
+
+            if space_craft.velocity > space_craft_stats.active_speed {
+                space_craft.velocity -= space_craft_stats.craft_accel;
+                if space_craft.velocity < space_craft_stats.active_speed {
+                    space_craft.velocity = space_craft_stats.active_speed;
+                }
+            } else if space_craft.velocity < space_craft_stats.active_speed {
+                space_craft.velocity += space_craft_stats.craft_accel;
+                if space_craft.velocity > space_craft_stats.active_speed {
+                    space_craft.velocity = space_craft_stats.active_speed;
+                }
+            }
+
+            transform.translation += dir * space_craft.velocity * time.delta_seconds();
         }
 
         if keyboard_input.pressed(KeyCode::KeyA) {
-            transform.rotate_z(4.0 * time.delta_seconds());
+            space_craft.rot_velocity += space_craft_stats.rot_accel;
+            if space_craft.rot_velocity > space_craft_stats.rot_speed {
+                space_craft.rot_velocity = space_craft_stats.rot_speed;
+            }
+            transform.rotate_z(space_craft.rot_velocity * time.delta_seconds());
         } else if keyboard_input.pressed(KeyCode::KeyD) {
-            transform.rotate_z(-4.0 * time.delta_seconds());
+            space_craft.rot_velocity -= space_craft_stats.rot_accel;
+            if space_craft.rot_velocity < -space_craft_stats.rot_speed {
+                space_craft.rot_velocity = -space_craft_stats.rot_speed;
+            }
+            transform.rotate_z(space_craft.rot_velocity * time.delta_seconds());
+        } else {
+            if space_craft.rot_velocity > 0.0 {
+                space_craft.rot_velocity -= space_craft_stats.rot_accel;
+                if space_craft.rot_velocity < 0.0 {
+                    space_craft.rot_velocity = 0.0;
+                }
+            } else if space_craft.rot_velocity < 0.0 {
+                space_craft.rot_velocity += space_craft_stats.rot_accel;
+                if space_craft.rot_velocity > 0.0 {
+                    space_craft.rot_velocity = 0.0;
+                }
+            }
+            transform.rotate_z(space_craft.rot_velocity * time.delta_seconds());
         }
     }
 }
 
-fn enemy_movement(mut query: Query<(&mut Transform, &Velocity), With<Enemy>>, time: Res<Time>) {
-    for (mut transform, velocity2d) in query.iter_mut() {
-        let dir = transform.up();
-        transform.translation += dir * velocity2d.value * time.delta_seconds();
-        transform.rotate_z(1.5 * time.delta_seconds());
+// fn enemy_movement(mut query: Query<(&mut Transform, &Velocity), With<Enemy>>, time: Res<Time>) {
+//     for (mut transform, velocity2d) in query.iter_mut() {
+//         let dir = transform.up();
+//         transform.translation += dir * velocity2d.value * time.delta_seconds();
+//         transform.rotate_z(1.5 * time.delta_seconds());
+//     }
+// }
+
+
+fn print_craft_stats (query: Query<&SpaceCraft>) {
+    for space_craft in query.iter() {
+        println!("V:{:?} RV:{:?}", space_craft.velocity,space_craft.rot_velocity);
     }
 }
 
