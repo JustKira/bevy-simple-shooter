@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{log::tracing_subscriber::fmt::time, prelude::*};
 
 #[derive(Component, Debug)]
 struct Player {}
@@ -31,12 +31,28 @@ fn main() {
         .add_plugins(DefaultPlugins)
         // Adding the system to the app
         .add_systems(Startup, step_up)
-        .add_systems(Update, (player_movement, camera_movement,print_craft_stats).chain())
+        .add_systems(
+            Update,
+            (player_movement, camera_movement, print_craft_stats).chain(),
+        )
         .run();
 }
 
 fn step_up(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn((Camera2dBundle::default(), PlayerCamera));
+    commands.spawn((
+        Camera2dBundle {
+            projection: OrthographicProjection {
+                // don't forget to set `near` and `far`
+                near: -1000.0,
+                far: 5000.0,
+                scale: 2.0,
+                // ... any other settings you want to change ...
+                ..default()
+            },
+            ..default()
+        },
+        PlayerCamera,
+    ));
     commands.spawn((
         SpriteBundle {
             texture: asset_server.load("enemy_A.png"),
@@ -65,7 +81,6 @@ fn step_up(mut commands: Commands, asset_server: Res<AssetServer>) {
             craft_accel: 5.5,
         },
     ));
-
 }
 
 fn player_movement(
@@ -146,21 +161,33 @@ fn player_movement(
 //     }
 // }
 
-
-fn print_craft_stats (query: Query<&SpaceCraft>) {
+fn print_craft_stats(query: Query<&SpaceCraft>) {
     for space_craft in query.iter() {
-        println!("V:{:?} RV:{:?}", space_craft.velocity,space_craft.rot_velocity);
+        println!(
+            "V:{:?} RV:{:?}",
+            space_craft.velocity, space_craft.rot_velocity
+        );
     }
 }
 
 fn camera_movement(
     mut camera: Query<&mut Transform, (With<PlayerCamera>, Without<Player>)>,
     player: Query<&Transform, (With<Player>, Without<PlayerCamera>)>,
+    time: Res<Time>,
 ) {
+    let smoothing_factor = 5.5; // Adjust this value for faster or slower smoothing
+
     for mut transform in &mut camera {
         for player_transform in &player {
-            transform.translation.x = player_transform.translation.x;
-            transform.translation.y = player_transform.translation.y;
+            // Interpolate between the current camera position and the player's position
+            transform.translation.x = transform.translation.x.lerp(
+                player_transform.translation.x,
+                smoothing_factor * time.delta_seconds(),
+            );
+            transform.translation.y = transform.translation.y.lerp(
+                player_transform.translation.y,
+                smoothing_factor * time.delta_seconds(),
+            );
         }
     }
 }
