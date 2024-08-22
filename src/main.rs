@@ -1,4 +1,4 @@
-use bevy::{log::tracing_subscriber::fmt::time, prelude::*};
+use bevy::prelude::*;
 
 #[derive(Component, Debug)]
 struct Player {}
@@ -25,6 +25,14 @@ struct SpaceCraft {
     rot_velocity: f32,
 }
 
+#[derive(Component, Debug)]
+struct Bullet {
+    velocity: f32,
+    damage: f32,
+    lifetime: f32,
+    time_alive: f32,
+}
+
 fn main() {
     App::new()
         //This is the default plugin that comes with bevy which includes the renderer and ui
@@ -35,6 +43,7 @@ fn main() {
             Update,
             (player_movement, camera_movement, print_craft_stats).chain(),
         )
+        .add_systems(Update, bullet_movement)
         .run();
 }
 
@@ -55,7 +64,7 @@ fn step_up(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
     commands.spawn((
         SpriteBundle {
-            texture: asset_server.load("enemy_A.png"),
+            texture: asset_server.load("meteor_large.png"),
             transform: Transform::from_xyz(75.0, 50.0, 0.0),
             ..default()
         },
@@ -83,9 +92,27 @@ fn step_up(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 }
 
+fn bullet_movement(
+    mut query: Query<(Entity, &mut Transform, &mut Bullet)>,
+    time: Res<Time>,
+    mut commands: Commands,
+) {
+    for (entity, mut transform, mut bullet) in query.iter_mut() {
+        let dir = transform.up().normalize();
+        bullet.time_alive += time.delta_seconds();
+        if bullet.time_alive > bullet.lifetime {
+            commands.entity(entity).despawn();
+            continue;
+        }
+        transform.translation += dir * bullet.velocity * time.delta_seconds();
+    }
+}
+
 fn player_movement(
     mut query: Query<(&mut Transform, &mut SpaceCraft, &SpaceCraftStats), With<Player>>,
+    asset_server: Res<AssetServer>,
     time: Res<Time>,
+    mut commands: Commands,
     keyboard_input: Res<ButtonInput<KeyCode>>,
 ) {
     for (mut transform, mut space_craft, space_craft_stats) in query.iter_mut() {
@@ -149,6 +176,22 @@ fn player_movement(
                 }
             }
             transform.rotate_z(space_craft.rot_velocity * time.delta_seconds());
+        }
+
+        if keyboard_input.pressed(KeyCode::Space) {
+            commands.spawn((
+                SpriteBundle {
+                    texture: asset_server.load("bullet.png"),
+                    transform: transform.clone(),
+                    ..default()
+                },
+                Bullet {
+                    velocity: 1500.0,
+                    damage: 10.0,
+                    time_alive: 0.0,
+                    lifetime: 5.0,
+                },
+            ));
         }
     }
 }
